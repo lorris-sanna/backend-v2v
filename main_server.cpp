@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
 
     qWarning() << "Chargement du graphe:" << QString::fromStdString(osmFile);
     
-    server.chargerGrapheEtVoitures("../../../" + osmFile, 10000);
+    server.chargerGrapheEtVoitures(osmFile, 10000);
 
     //demarrage de la simulation
     server.demarrerSimulation();
