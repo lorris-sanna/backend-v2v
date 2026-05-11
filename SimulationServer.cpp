@@ -128,30 +128,31 @@ void SimulationServer::demarrerSimulation()
         return;
     }
 
-    simulationActive = true;
-    simulationPausee = false;
-    simulationTimer->start(16); //~60 FPS
-    qWarning() << "Simulation démarree";
-    broadcastSimulationState();
+    if (!isRunning) {
+        simulationTimer->start(16); //~60 FPS
+        isRunning = true;
+        qWarning() << "Simulation démarree";
+    }
+    
+    broadcastStatus();
 }
 
 void SimulationServer::arreterSimulation()
 {
-    simulationActive = false;
-    simulationTimer->stop();
-    qWarning() << "Simulation arrêtée";
-}
-
-void SimulationServer::togglePause()
-{
-    simulationPausee = !simulationPausee;
-    qWarning() << "Simulation" << (simulationPausee ? "mise en pause" : "reprise");
-    broadcastSimulationState();
+    if (isRunning) {
+        simulationTimer->stop();
+        isRunning = false;
+        qWarning() << "Simulation arretee";
+    }
+    
+    broadcastStatus();
 }
 
 void SimulationServer::setFacteurVitesse(double facteur)
 {
     facteurVitesse = facteur;
+    qWarning() << "Facteur de vitesse : " << facteur;
+    broadcastStatus();
 }
 
 void SimulationServer::onNewConnection()
@@ -164,6 +165,8 @@ void SimulationServer::onNewConnection()
 
         clients.append(socket);
         socket->sendTextMessage(generateJsonResponse());
+        //envoi du status initial au nouveau client
+        socket->sendTextMessage(generateStatusMessage());
     }
 }
 
@@ -188,25 +191,25 @@ void SimulationServer::onTextMessageReceived(const QString& message)
     }
 
     const QJsonObject payload = document.object();
-    const QString command = payload.value("command").toString();
+    const QString command = payload["command"].toString();
 
-    qWarning() << "Commande WebSocket:" << command;
-
-    if (command == "start") {
+    if (command == "play") {
         demarrerSimulation();
-    } else if (command == "stop") {
+        qWarning() << "Commande PLAY recue";
+    }
+    else if (command == "pause") {
         arreterSimulation();
-    } else if (command == "pause") {
-        togglePause();
-    } else if (command == "speed") {
-        setFacteurVitesse(payload.value("value").toDouble(1.0));
-        broadcastSimulationState();
+        qWarning() << "Commande PAUSE recue";
+    }
+    else if (command == "setSpeed") {
+        double speed = payload["value"].toDouble(1.0);
+        setFacteurVitesse(speed);
+        qWarning() << "Commande SET_SPEED recue:" << speed;
     }
 }
 
 void SimulationServer::onSimulationTick()
 {
-    if (!simulationActive || simulationPausee) return;
     deplacerVoitures();
     if (frameCount % 10 == 0) {
         broadcastSimulationState();
@@ -252,8 +255,6 @@ QString SimulationServer::generateJsonResponse() const
     root["type"] = "update";
     root["timestamp"] = (int)(QDateTime::currentMSecsSinceEpoch() / 1000);
     root["data"] = voituresArray;
-    root["simulationRunning"] = simulationActive;
-    root["simulationPaused"] = simulationPausee;
 
     QJsonDocument doc(root);
     return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
@@ -266,4 +267,30 @@ void SimulationServer::deplacerVoitures()
     }
 
     frameCount++;
+}
+
+QString SimulationServer::generateStatusMessage() const
+{
+    QJsonObject root;
+    root["type"] = "status";
+    root["isRunning"] = isRunning;
+    root["speedFactor"] = facteurVitesse;
+    root["timestamp"] = (int)(QDateTime::currentMSecsSinceEpoch() / 1000);
+
+    QJsonDocument doc(root);
+    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+}
+
+void SimulationServer::broadcastStatus()
+{
+    if (clients.isEmpty()) {
+        return;
+    }
+
+    const QString data = generateStatusMessage();
+    for (QWebSocket* socket : clients) {
+        if (socket && socket->isValid()) {
+            socket->sendTextMessage(data);
+        }
+    }
 }

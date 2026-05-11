@@ -29,7 +29,6 @@ int main(int argc, char *argv[])
     
     server.chargerGrapheEtVoitures(osmFile, 10000);
 
-    //demarrage de la simulation
     server.demarrerSimulation();
 
     qWarning() << "Serveur WebSocket actif sur ws://localhost:8080";

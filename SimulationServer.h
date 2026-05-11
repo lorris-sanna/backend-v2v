@@ -39,14 +39,11 @@ public:
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
     void demarrerSimulation();
     void arreterSimulation();
-    void togglePause();
     void setFacteurVitesse(double facteur);
 
     //accesseurs
     int getNombreVoitures() const { return voitures.size(); }
     int getNombreAretes() const { return graphe.getAretes().size(); }
-    bool estEnCours() const { return simulationActive; }
-    bool estEnPause() const { return simulationPausee; }
 
 private slots:
     void onNewConnection();
@@ -59,7 +56,9 @@ private:
     void deplacerVoitures();
     
     QString generateJsonResponse() const;
+    QString generateStatusMessage() const;
     void broadcastSimulationState();
+    void broadcastStatus();
 
     //membres
     QWebSocketServer* webSocketServer;
@@ -69,9 +68,8 @@ private:
     Graphe graphe;
     std::vector<Voiture> voitures;
     
+    bool isRunning = false;
     double facteurVitesse = 1.0;
-    bool simulationActive = false;
-    bool simulationPausee = false;
     int frameCount = 0;
 };
 
