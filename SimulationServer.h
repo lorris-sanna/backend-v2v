@@ -37,6 +37,7 @@ public:
 
     //contrôle de la simulation
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
+    bool chargerGrapheDepuisBbox(double minLon, double minLat, double maxLon, double maxLat, int nbVoitures, QString& errorMsg);
     void demarrerSimulation();
     void arreterSimulation();
     void setFacteurVitesse(double facteur);

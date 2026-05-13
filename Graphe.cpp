@@ -94,6 +94,7 @@ void Graphe::metersToLatLon(double x, double y, double& outLat, double& outLon) 
 bool Graphe::chargerDepuisOSM(const std::string& fichierOSM)
 {
     XMLDocument doc;
+
     if (doc.LoadFile(fichierOSM.c_str()) != XML_SUCCESS) {
         std::cerr << "Erreur de chargement du fichier OSM : " << fichierOSM << std::endl;
         return false;
