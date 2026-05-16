@@ -8,6 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 SimulationServer::SimulationServer(quint16 port, QObject* parent)
     : QObject(parent),
@@ -128,6 +129,57 @@ void SimulationServer::setNombreVoitures(int nb)
     broadcastSimulationState();
 }
 
+void SimulationServer::addVehicle(double lat, double lon)
+{
+    const auto& aretes = graphe.getAretes();
+    if (aretes.empty()) return;
+
+    double x, y;
+    graphe.latLonToMeters(lat, lon, graphe.originLat, graphe.originLon, x, y);
+
+    //trouver l'arete la plus proche et projeter le point dessus
+    Noeud* bestA = nullptr;
+    Noeud* bestB = nullptr;
+    double bestDist = std::numeric_limits<double>::max();
+    double bestX = x, bestY = y;
+
+    for (const auto& e : aretes) {
+        double ax = e.first->getX(), ay = e.first->getY();
+        double bx = e.second->getX(), by = e.second->getY();
+        double dx = bx - ax, dy = by - ay;
+        double len2 = dx*dx + dy*dy;
+        double t = (len2 > 0) ? std::max(0.0, std::min(1.0, ((x-ax)*dx + (y-ay)*dy) / len2)) : 0.0;
+        double px = ax + t*dx, py = ay + t*dy;
+        double d2 = (x-px)*(x-px) + (y-py)*(y-py);
+        if (d2 < bestDist) {
+            bestDist = d2;
+            bestA = e.first;
+            bestB = e.second;
+            bestX = px;
+            bestY = py;
+        }
+    }
+
+    if (!bestA) return;
+
+    int maxId = -1;
+    for (const auto& v : voitures) if (v.getId() > maxId) maxId = v.getId();
+
+    voitures.emplace_back(maxId + 1, bestA, bestB, bestX, bestY, 0.4);
+    qWarning() << "Voiture ajoutee id=" << maxId + 1;
+    broadcastSimulationState();
+}
+
+void SimulationServer::removeVehicle(int id)
+{
+    auto it = std::find_if(voitures.begin(), voitures.end(),
+                           [id](const Voiture& v) { return v.getId() == id; });
+    if (it == voitures.end()) return;
+    voitures.erase(it);
+    qWarning() << "Voiture supprimee id=" << id;
+    broadcastSimulationState();
+}
+
 void SimulationServer::demarrerSimulation()
 {
     if (voitures.empty()) {
@@ -210,6 +262,11 @@ void SimulationServer::onTextMessageReceived(const QString& message)
         broadcastSimulationState();
     } else if (command == "setVehicles") {
         setNombreVoitures(payload.value("value").toInt(1000));
+    } else if (command == "addVehicle") {
+        QJsonObject coords = payload.value("value").toObject();
+        addVehicle(coords.value("lat").toDouble(), coords.value("lon").toDouble());
+    } else if (command == "removeVehicle") {
+        removeVehicle(payload.value("value").toInt(-1));
     }
 }
 

@@ -38,6 +38,8 @@ public:
     //contrôle de la simulation
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
     void setNombreVoitures(int nb);
+    void addVehicle(double lat, double lon);
+    void removeVehicle(int id);
     void demarrerSimulation();
     void arreterSimulation();
     void togglePause();
