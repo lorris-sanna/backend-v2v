@@ -36,10 +36,19 @@ public:
 
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
     bool chargerGrapheDepuisBbox(double minLon, double minLat, double maxLon, double maxLat, int nbVoitures, QString& errorMsg);
+    void setNombreVoitures(int nb);
+    void addVehicle(double lat, double lon);
+    void removeVehicle(int id);
+    void demarrerSimulation();
+    void arreterSimulation();
+    void togglePause();
+    void setFacteurVitesse(double facteur);
 
     //accesseurs
     int getNombreVoitures() const { return voitures.size(); }
     int getNombreAretes() const { return graphe.getAretes().size(); }
+    bool estEnCours() const { return simulationActive; }
+    bool estEnPause() const { return simulationPausee; }
 
 private slots:
     void onNewConnection();
@@ -49,6 +58,7 @@ private slots:
 
 private:
     void deplacerVoitures();
+    void creerVoitures(int nb);
     
     QString generateJsonResponse() const;
     void broadcastSimulationState();
@@ -60,6 +70,9 @@ private:
     
     Graphe graphe;
     std::vector<Voiture> voitures;
+    double facteurVitesse = 1.0;
+    bool simulationActive = false;
+    bool simulationPausee = false;
     int frameCount = 0;
 };
 
