@@ -1,7 +1,5 @@
 #include <QCoreApplication>
 #include <QDebug>
-#include <QDir>
-#include <QFileInfo>
 #include "SimulationServer.h"
 
 /**
@@ -22,18 +20,8 @@ int main(int argc, char *argv[])
     //creation du serveur sur le port 8080
     SimulationServer server(8080);
 
-    //fichier OSM
-    std::string osmFile = "mulhouse.osm";
-
-    qWarning() << "Chargement du graphe:" << QString::fromStdString(osmFile);
-    
-    server.chargerGrapheEtVoitures(osmFile, 10000);
-
-    //demarrage de la simulation
-    server.demarrerSimulation();
-
     qWarning() << "Serveur WebSocket actif sur ws://localhost:8080";
-    qWarning() << "En attente d'une connexion frontend...";
+    qWarning() << "En attente d'un chargement OSM depuis le frontend...";
 
     return app.exec();
 }
