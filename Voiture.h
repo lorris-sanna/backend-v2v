@@ -27,6 +27,7 @@ public:
     int getId() const;
     void setVitesse(int v);
     double getVitesseKmH() const;
+    double getAngle() const;
 
 private:
     void choisirProchainVoisin();
@@ -35,6 +36,7 @@ private:
     double d_x, d_y;
     double d_vitesse;
     double d_vitesseReelle;
+    double d_angle;
     Noeud* d_currentNode;
     Noeud* d_nextNode;
     Noeud* d_ancienNoeud;

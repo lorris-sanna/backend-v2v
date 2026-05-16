@@ -8,6 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 SimulationServer::SimulationServer(quint16 port, QObject* parent)
     : QObject(parent),
@@ -38,20 +39,13 @@ SimulationServer::~SimulationServer()
     webSocketServer->close();
 }
 
-void SimulationServer::chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures)
+void SimulationServer::creerVoitures(int nb)
 {
-    if (!graphe.chargerDepuisOSM(pathOSM)) {
-        qWarning() << "Erreur: impossible de charger le fichier OSM";
-        return;
-    }
-
     voitures.clear();
 
-    //creation des voitures en les repartissant sur les aretes
     const auto& aretes = graphe.getAretes();
     if (aretes.empty()) return;
 
-    //calcul longueurs des aretes
     std::vector<double> longueurs;
     longueurs.reserve(aretes.size());
     double totalLongueur = 0.0;
@@ -64,28 +58,25 @@ void SimulationServer::chargerGrapheEtVoitures(const std::string& pathOSM, int n
     }
 
     if (totalLongueur <= 0.0) {
-        //repartition par noeuds si pas de longueur calculable
         const auto& noeuds = graphe.getNoeuds();
         int nbNoeuds = noeuds.size();
         if (nbNoeuds == 0) return;
-        for (int i = 0; i < nbVoitures; ++i) {
+        for (int i = 0; i < nb; ++i) {
             Noeud* noeudDepart = noeuds[i % nbNoeuds];
             voitures.emplace_back(i, noeudDepart, 0.4);
         }
     } else {
-        //allocation entiere basee sur parties fractionnaires
         size_t m = aretes.size();
         std::vector<double> ideals(m);
         std::vector<int> counts(m, 0);
         double accum = 0.0;
         for (size_t i = 0; i < m; ++i) {
-            ideals[i] = (longueurs[i] / totalLongueur) * nbVoitures;
+            ideals[i] = (longueurs[i] / totalLongueur) * nb;
             counts[i] = static_cast<int>(std::floor(ideals[i]));
             accum += counts[i];
         }
 
-        int remaining = nbVoitures - static_cast<int>(accum);
-        //tri des indices par partie fractionnaire decroissante
+        int remaining = nb - static_cast<int>(accum);
         std::vector<size_t> idx(m);
         for (size_t i = 0; i < m; ++i) idx[i] = i;
         std::sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
@@ -95,7 +86,6 @@ void SimulationServer::chargerGrapheEtVoitures(const std::string& pathOSM, int n
             counts[idx[k % m]] += 1;
         }
 
-        //creation des voitures le long de chaque arete
         int idCounter = 0;
         for (size_t ei = 0; ei < m; ++ei) {
             int c = counts[ei];
@@ -108,17 +98,86 @@ void SimulationServer::chargerGrapheEtVoitures(const std::string& pathOSM, int n
             double by = b->getY();
 
             for (int k = 0; k < c; ++k) {
-                double t = (static_cast<double>(k) + 1.0) / (static_cast<double>(c) + 1.0); //pour eviter les extremites
+                double t = (static_cast<double>(k) + 1.0) / (static_cast<double>(c) + 1.0);
                 double initX = ax + t * (bx - ax);
                 double initY = ay + t * (by - ay);
-                //creation de voiture orientée de a vers b
                 voitures.emplace_back(idCounter++, a, b, initX, initY, 0.4);
             }
         }
     }
 
+    qWarning() << "Voitures recrees:" << nb;
+}
+
+void SimulationServer::chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures)
+{
+    if (!graphe.chargerDepuisOSM(pathOSM)) {
+        qWarning() << "Erreur: impossible de charger le fichier OSM";
+        return;
+    }
+
+    creerVoitures(nbVoitures);
+
     qWarning() << "Simulation chargee avec" << nbVoitures << "voitures et"
                << graphe.getAretes().size() << "aretes";
+}
+
+void SimulationServer::setNombreVoitures(int nb)
+{
+    if (nb < 1) return;
+    creerVoitures(nb);
+    broadcastSimulationState();
+}
+
+void SimulationServer::addVehicle(double lat, double lon)
+{
+    const auto& aretes = graphe.getAretes();
+    if (aretes.empty()) return;
+
+    double x, y;
+    graphe.latLonToMeters(lat, lon, graphe.originLat, graphe.originLon, x, y);
+
+    //trouver l'arete la plus proche et projeter le point dessus
+    Noeud* bestA = nullptr;
+    Noeud* bestB = nullptr;
+    double bestDist = std::numeric_limits<double>::max();
+    double bestX = x, bestY = y;
+
+    for (const auto& e : aretes) {
+        double ax = e.first->getX(), ay = e.first->getY();
+        double bx = e.second->getX(), by = e.second->getY();
+        double dx = bx - ax, dy = by - ay;
+        double len2 = dx*dx + dy*dy;
+        double t = (len2 > 0) ? std::max(0.0, std::min(1.0, ((x-ax)*dx + (y-ay)*dy) / len2)) : 0.0;
+        double px = ax + t*dx, py = ay + t*dy;
+        double d2 = (x-px)*(x-px) + (y-py)*(y-py);
+        if (d2 < bestDist) {
+            bestDist = d2;
+            bestA = e.first;
+            bestB = e.second;
+            bestX = px;
+            bestY = py;
+        }
+    }
+
+    if (!bestA) return;
+
+    int maxId = -1;
+    for (const auto& v : voitures) if (v.getId() > maxId) maxId = v.getId();
+
+    voitures.emplace_back(maxId + 1, bestA, bestB, bestX, bestY, 0.4);
+    qWarning() << "Voiture ajoutee id=" << maxId + 1;
+    broadcastSimulationState();
+}
+
+void SimulationServer::removeVehicle(int id)
+{
+    auto it = std::find_if(voitures.begin(), voitures.end(),
+                           [id](const Voiture& v) { return v.getId() == id; });
+    if (it == voitures.end()) return;
+    voitures.erase(it);
+    qWarning() << "Voiture supprimee id=" << id;
+    broadcastSimulationState();
 }
 
 void SimulationServer::demarrerSimulation()
@@ -201,6 +260,13 @@ void SimulationServer::onTextMessageReceived(const QString& message)
     } else if (command == "speed") {
         setFacteurVitesse(payload.value("value").toDouble(1.0));
         broadcastSimulationState();
+    } else if (command == "setVehicles") {
+        setNombreVoitures(payload.value("value").toInt(1000));
+    } else if (command == "addVehicle") {
+        QJsonObject coords = payload.value("value").toObject();
+        addVehicle(coords.value("lat").toDouble(), coords.value("lon").toDouble());
+    } else if (command == "removeVehicle") {
+        removeVehicle(payload.value("value").toInt(-1));
     }
 }
 

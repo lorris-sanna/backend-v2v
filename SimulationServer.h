@@ -37,6 +37,9 @@ public:
 
     //contrôle de la simulation
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
+    void setNombreVoitures(int nb);
+    void addVehicle(double lat, double lon);
+    void removeVehicle(int id);
     void demarrerSimulation();
     void arreterSimulation();
     void togglePause();
@@ -57,6 +60,7 @@ private slots:
 private:
     //méthode de simulation
     void deplacerVoitures();
+    void creerVoitures(int nb);
     
     QString generateJsonResponse() const;
     void broadcastSimulationState();
