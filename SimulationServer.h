@@ -23,7 +23,6 @@
  * - La simulation pure (calcul de positions) sans interface graphique
  * - Un flux WebSocket pour pousser l'état au frontend React
  * - L'envoi des données des voitures en JSON
- * - Le contrôle de la simulation (play/pause)
  * 
  * Le frontend s'abonne au WebSocket pour recevoir les mises à jour en direct.
  */
@@ -35,12 +34,8 @@ public:
     explicit SimulationServer(quint16 port = 8080, QObject* parent = nullptr);
     ~SimulationServer();
 
-    //contrôle de la simulation
     void chargerGrapheEtVoitures(const std::string& pathOSM, int nbVoitures);
     bool chargerGrapheDepuisBbox(double minLon, double minLat, double maxLon, double maxLat, int nbVoitures, QString& errorMsg);
-    void demarrerSimulation();
-    void arreterSimulation();
-    void setFacteurVitesse(double facteur);
 
     //accesseurs
     int getNombreVoitures() const { return voitures.size(); }
@@ -53,13 +48,10 @@ private slots:
     void onClientDisconnected();
 
 private:
-    //méthode de simulation
     void deplacerVoitures();
     
     QString generateJsonResponse() const;
-    QString generateStatusMessage() const;
     void broadcastSimulationState();
-    void broadcastStatus();
 
     //membres
     QWebSocketServer* webSocketServer;
@@ -68,9 +60,6 @@ private:
     
     Graphe graphe;
     std::vector<Voiture> voitures;
-    
-    bool isRunning = false;
-    double facteurVitesse = 1.0;
     int frameCount = 0;
 };
 

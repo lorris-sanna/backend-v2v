@@ -99,6 +99,8 @@ SimulationServer::SimulationServer(quint16 port, QObject* parent)
     //connexion des signaux
     connect(webSocketServer, &QWebSocketServer::newConnection, this, &SimulationServer::onNewConnection);
     connect(simulationTimer, &QTimer::timeout, this, &SimulationServer::onSimulationTick);
+
+    simulationTimer->start(16);
 }
 
 SimulationServer::~SimulationServer()
@@ -233,7 +235,6 @@ bool SimulationServer::chargerGrapheDepuisBbox(double minLon, double minLat, dou
         if (c && c->isValid()) c->sendTextMessage(infoText);
     }
 
-    arreterSimulation();
     chargerGrapheEtVoitures(tempPath.toStdString(), nbVoitures);
 
     if (graphe.getAretes().empty()) {
@@ -245,8 +246,6 @@ bool SimulationServer::chargerGrapheDepuisBbox(double minLon, double minLat, dou
         for (QWebSocket* c : clients) if (c && c->isValid()) c->sendTextMessage(errText);
         return false;
     }
-
-    demarrerSimulation();
 
     QJsonObject loadedMsg;
     loadedMsg["type"] = "loaded";
@@ -260,40 +259,6 @@ bool SimulationServer::chargerGrapheDepuisBbox(double minLon, double minLat, dou
     return true;
 }
 
-void SimulationServer::demarrerSimulation()
-{
-    if (voitures.empty()) {
-        qWarning() << "Erreur: aucune voiture n'a ete chargee";
-        return;
-    }
-
-    if (!isRunning) {
-        simulationTimer->start(16); //60 FPS
-        isRunning = true;
-        qWarning() << "Simulation démarree";
-    }
-    
-    broadcastStatus();
-}
-
-void SimulationServer::arreterSimulation()
-{
-    if (isRunning) {
-        simulationTimer->stop();
-        isRunning = false;
-        qWarning() << "Simulation arretee";
-    }
-    
-    broadcastStatus();
-}
-
-void SimulationServer::setFacteurVitesse(double facteur)
-{
-    facteurVitesse = facteur;
-    qWarning() << "Facteur de vitesse : " << facteur;
-    broadcastStatus();
-}
-
 void SimulationServer::onNewConnection()
 {
     while (QWebSocket* socket = webSocketServer->nextPendingConnection()) {
@@ -304,8 +269,6 @@ void SimulationServer::onNewConnection()
 
         clients.append(socket);
         socket->sendTextMessage(generateJsonResponse());
-        //envoi du status initial au nouveau client
-        socket->sendTextMessage(generateStatusMessage());
     }
 }
 
@@ -332,20 +295,7 @@ void SimulationServer::onTextMessageReceived(const QString& message)
     const QJsonObject payload = document.object();
     const QString command = payload["command"].toString();
 
-    if (command == "play") {
-        demarrerSimulation();
-        qWarning() << "Commande PLAY recue";
-    }
-    else if (command == "pause") {
-        arreterSimulation();
-        qWarning() << "Commande PAUSE recue";
-    }
-    else if (command == "setSpeed") {
-        double speed = payload["value"].toDouble(1.0);
-        setFacteurVitesse(speed);
-        qWarning() << "Commande SET_SPEED recue:" << speed;
-    }
-    else if (command == "loadOsmContent") {
+    if (command == "loadOsmContent") {
         const QJsonObject value = payload["value"].toObject();
         const QString xmlContent = value["osmContent"].toString();
         const int nbVoitures = value["nbVoitures"].toInt(10000);
@@ -368,7 +318,6 @@ void SimulationServer::onTextMessageReceived(const QString& message)
         out << xmlContent;
         file.close();
 
-        arreterSimulation();
         chargerGrapheEtVoitures(tempPath.toStdString(), nbVoitures);
 
         if (graphe.getAretes().empty()) {
@@ -379,8 +328,6 @@ void SimulationServer::onTextMessageReceived(const QString& message)
             socket->sendTextMessage(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
             return;
         }
-
-        demarrerSimulation();
 
         QJsonObject loadedMsg;
         loadedMsg["type"] = "loaded";
@@ -473,34 +420,8 @@ QString SimulationServer::generateJsonResponse() const
 void SimulationServer::deplacerVoitures()
 {
     for (size_t i = 0; i < voitures.size(); ++i) {
-        voitures[i].deplacer(facteurVitesse, {});
+        voitures[i].deplacer(1.0, {});
     }
 
     frameCount++;
-}
-
-QString SimulationServer::generateStatusMessage() const
-{
-    QJsonObject root;
-    root["type"] = "status";
-    root["isRunning"] = isRunning;
-    root["speedFactor"] = facteurVitesse;
-    root["timestamp"] = (int)(QDateTime::currentMSecsSinceEpoch() / 1000);
-
-    QJsonDocument doc(root);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-void SimulationServer::broadcastStatus()
-{
-    if (clients.isEmpty()) {
-        return;
-    }
-
-    const QString data = generateStatusMessage();
-    for (QWebSocket* socket : clients) {
-        if (socket && socket->isValid()) {
-            socket->sendTextMessage(data);
-        }
-    }
 }
